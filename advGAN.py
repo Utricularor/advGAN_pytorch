@@ -5,6 +5,9 @@ import models
 import torch.nn.functional as F
 import torchvision
 import os
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
 
 models_path = './models/'
 
@@ -112,6 +115,12 @@ class AdvGAN_Attack:
         return loss_D_GAN.item(), loss_G_fake.item(), loss_perturb.item(), loss_adv.item()
 
     def train(self, train_dataloader, epochs):
+
+        self.loss_D_hist = []
+        self.loss_G_fake_hist = []
+        self.loss_perturb_hist = []
+        self.loss_adv_hist = []
+    
         for epoch in range(1, epochs+1):
 
             if epoch == 50:
@@ -128,7 +137,11 @@ class AdvGAN_Attack:
             loss_G_fake_sum = 0
             loss_perturb_sum = 0
             loss_adv_sum = 0
-            for i, data in enumerate(train_dataloader, start=0):
+            
+            # for i, data in enumerate(train_dataloader, start=0):
+            progress_bar = tqdm(enumerate(train_dataloader, start=0), total=len(train_dataloader))
+            for i, data in progress_bar:
+
                 images, labels = data
                 images, labels = images.to(self.device), labels.to(self.device)
 
@@ -139,15 +152,49 @@ class AdvGAN_Attack:
                 loss_perturb_sum += loss_perturb_batch
                 loss_adv_sum += loss_adv_batch
 
+                # tqdmの進行状況バーに情報を表示
+                progress_bar.set_description(f"Epoch {epoch}/{epochs}")
+                progress_bar.set_postfix(loss_D=loss_D_sum/(i+1), 
+                                         loss_G_fake=loss_G_fake_sum/(i+1),
+                                         loss_perturb=loss_perturb_sum/(i+1), 
+                                         loss_adv=loss_adv_sum/(i+1))
+
             # print statistics
             num_batch = len(train_dataloader)
-            print("epoch %d:\nloss_D: %.3f, loss_G_fake: %.3f,\
-             \nloss_perturb: %.3f, loss_adv: %.3f, \n" %
-                  (epoch, loss_D_sum/num_batch, loss_G_fake_sum/num_batch,
-                   loss_perturb_sum/num_batch, loss_adv_sum/num_batch))
+            # print("epoch %d:\nloss_D: %.3f, loss_G_fake: %.3f,\
+            #  \nloss_perturb: %.3f, loss_adv: %.3f, \n" %
+            #       (epoch, loss_D_sum/num_batch, loss_G_fake_sum/num_batch,
+            #        loss_perturb_sum/num_batch, loss_adv_sum/num_batch))
+            
+            self.loss_D_hist.append(loss_D_sum/num_batch)
+            self.loss_G_fake_hist.append(loss_G_fake_sum/num_batch)
+            self.loss_perturb_hist.append(loss_perturb_sum/num_batch)
+            self.loss_adv_hist.append(loss_adv_sum/num_batch)
 
             # save generator
-            if epoch%20==0:
-                netG_file_name = models_path + 'netG_epoch_' + str(epoch) + '.pth'
+            if epoch%10==0:
+                netG_file_name = models_path + 'netG_256128_epoch_' + str(epoch) + '.pth'
                 torch.save(self.netG.state_dict(), netG_file_name)
 
+            # 追加：学習曲線を描画するメソッドを呼び出し
+            if epoch%10 == 0:
+                self.plot_train_curves(epoch)
+
+    def plot_train_curves(self, epoch):
+        epochs = len(self.loss_D_hist)
+        plt.figure(figsize=(10, 8))
+
+        # 各損失の学習曲線を描画
+        plt.plot(range(1, epochs + 1), self.loss_D_hist, label="Loss_D")
+        plt.plot(range(1, epochs + 1), self.loss_G_fake_hist, label="Loss_G_fake")
+        plt.plot(range(1, epochs + 1), self.loss_perturb_hist, label="Loss_perturb")
+        plt.plot(range(1, epochs + 1), self.loss_adv_hist, label="Loss_adv")
+
+        plt.title("Training Losses")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+
+        # カレントディレクトリに.png形式で保存
+        plt.savefig(f"training_curves_{epoch}.png")
+        plt.close()

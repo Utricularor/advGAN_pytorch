@@ -15,14 +15,21 @@ if __name__ == "__main__":
     print("CUDA Available: ", torch.cuda.is_available())
     device = torch.device("cuda" if (use_cuda and torch.cuda.is_available()) else "cpu")
 
-    mnist_dataset = torchvision.datasets.MNIST('./dataset', train=True, transform=transforms.ToTensor(), download=True)
+
+    # 画像の変換を定義
+    transform = transforms.Compose([
+        transforms.Resize((256, 128)),  # 画像のサイズを256x128に変更
+        transforms.ToTensor()           # 画像をテンソルに変換
+    ])
+
+    mnist_dataset = torchvision.datasets.MNIST('./dataset', train=True, transform=transform, download=True)
     train_dataloader = DataLoader(mnist_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     # training the target model
     target_model = MNIST_target_net().to(device)
     target_model.train()
     opt_model = torch.optim.Adam(target_model.parameters(), lr=0.001)
-    epochs = 40
+    epochs = 20
     for epoch in range(epochs):
         loss_epoch = 0
         if epoch == 20:
@@ -40,12 +47,12 @@ if __name__ == "__main__":
         print('loss in epoch %d: %f' % (epoch, loss_epoch.item()))
 
     # save model
-    targeted_model_file_name = './MNIST_target_model.pth'
+    targeted_model_file_name = './MNIST_target_model_256128size.pth'
     torch.save(target_model.state_dict(), targeted_model_file_name)
     target_model.eval()
 
     # MNIST test dataset
-    mnist_dataset_test = torchvision.datasets.MNIST('./dataset', train=False, transform=transforms.ToTensor(), download=True)
+    mnist_dataset_test = torchvision.datasets.MNIST('./dataset', train=False, transform=transform, download=True)
     test_dataloader = DataLoader(mnist_dataset_test, batch_size=batch_size, shuffle=True, num_workers=1)
     num_correct = 0
     for i, data in enumerate(test_dataloader, 0):

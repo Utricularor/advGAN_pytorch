@@ -3,9 +3,9 @@ import torch.nn.functional as F
 
 
 # Target Model definition
-class MNIST_target_net(nn.Module):
+class MNIST_target_net_org(nn.Module):
     def __init__(self):
-        super(MNIST_target_net, self).__init__()
+        super(MNIST_target_net_org, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=3)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3)
@@ -29,10 +29,42 @@ class MNIST_target_net(nn.Module):
         x = self.logits(x)
         return x
 
+# Target Model definition
+class MNIST_target_net(nn.Module):
+    def __init__(self):
+        super(MNIST_target_net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=3)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size=3)
+        self.conv5 = nn.Conv2d(64, 128, kernel_size=3)
+        self.conv6 = nn.Conv2d(128, 128, kernel_size=3)
 
-class Discriminator(nn.Module):
+        # 全結合層の入力サイズを計算するための畳み込み層とプーリング層の適用を考慮
+        self.fc1 = nn.Linear(128*28*12, 200)
+        self.fc2 = nn.Linear(200, 200)
+        self.logits = nn.Linear(200, 10)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, 2)
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.max_pool2d(x, 2)
+        x = F.relu(self.conv5(x))
+        x = F.relu(self.conv6(x))
+        x = F.max_pool2d(x, 2)
+        x = x.view(-1, 128*28*12)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, 0.5)
+        x = F.relu(self.fc2(x))
+        x = self.logits(x)
+        return x
+    
+class Discriminator_org(nn.Module):
     def __init__(self, image_nc):
-        super(Discriminator, self).__init__()
+        super(Discriminator_org, self).__init__()
         # MNIST: 1*28*28
         model = [
             nn.Conv2d(image_nc, 8, kernel_size=4, stride=2, padding=0, bias=True),
@@ -54,14 +86,49 @@ class Discriminator(nn.Module):
     def forward(self, x):
         output = self.model(x).squeeze()
         return output
+    
+
+class Discriminator(nn.Module):
+    def __init__(self, image_nc):
+        super(Discriminator, self).__init__()
+        # Input: 1*256*128
+        model = [
+            nn.Conv2d(image_nc, 8, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), bias=True),
+            nn.LeakyReLU(0.2),
+            # 8*128*64
+            nn.Conv2d(8, 16, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), bias=True),
+            nn.BatchNorm2d(16),
+            nn.LeakyReLU(0.2),
+            # 16*64*32
+            nn.Conv2d(16, 32, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), bias=True),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.2),
+            # 32*32*16
+            nn.Conv2d(32, 64, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), bias=True),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            # 64*16*8
+            nn.Conv2d(64, 128, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), bias=True),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2),
+            # 128*8*4
+            nn.Conv2d(128, 1, kernel_size=(8, 4), stride=(1, 1), padding=(0, 0), bias=True),
+            nn.Sigmoid()
+            # 1*1*1
+        ]
+        self.model = nn.Sequential(*model)
+
+    def forward(self, x):
+        output = self.model(x).squeeze()
+        return output
 
 
-class Generator(nn.Module):
+class Generator_org(nn.Module):
     def __init__(self,
                  gen_input_nc,
                  image_nc,
                  ):
-        super(Generator, self).__init__()
+        super(Generator_org, self).__init__()
 
         encoder_lis = [
             # MNIST:1*28*28
@@ -96,6 +163,65 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(8, image_nc, kernel_size=6, stride=1, padding=0, bias=False),
             nn.Tanh()
             # state size. image_nc x 28 x 28
+        ]
+
+        self.encoder = nn.Sequential(*encoder_lis)
+        self.bottle_neck = nn.Sequential(*bottle_neck_lis)
+        self.decoder = nn.Sequential(*decoder_lis)
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.bottle_neck(x)
+        x = self.decoder(x)
+        return x
+
+class Generator(nn.Module):
+    def __init__(self, gen_input_nc, image_nc):
+        super(Generator, self).__init__()
+
+        encoder_lis = [
+            # Input: gen_input_nc x 256 x 128
+            nn.Conv2d(gen_input_nc, 8, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.InstanceNorm2d(8),
+            nn.ReLU(),
+            # 8 x 128 x 64
+            nn.Conv2d(8, 16, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.InstanceNorm2d(16),
+            nn.ReLU(),
+            # 16 x 64 x 32
+            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.InstanceNorm2d(32),
+            nn.ReLU(),
+            # 32 x 32 x 16
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.InstanceNorm2d(64),
+            nn.ReLU(),
+            # 64 x 16 x 8
+        ]
+
+        bottle_neck_lis = [
+            ResnetBlock(64),
+            ResnetBlock(64),
+            ResnetBlock(64),
+            ResnetBlock(64),
+        ]
+
+        decoder_lis = [
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.InstanceNorm2d(32),
+            nn.ReLU(),
+            # 32 x 32 x 16
+            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.InstanceNorm2d(16),
+            nn.ReLU(),
+            # 16 x 64 x 32
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.InstanceNorm2d(8),
+            nn.ReLU(),
+            # 8 x 128 x 64
+            nn.ConvTranspose2d(8, image_nc, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Tanh()
+            # image_nc x 256 x 128
         ]
 
         self.encoder = nn.Sequential(*encoder_lis)
