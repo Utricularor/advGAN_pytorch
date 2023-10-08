@@ -1,13 +1,35 @@
+import os
+from PIL import Image
+from sklearn.model_selection import train_test_split
+
 import torch
 import torchvision.datasets
+from torchvision.io import read_image
 import torchvision.transforms as transforms
+from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import models
 from models import MNIST_target_net
 from sklearn.metrics import confusion_matrix
 import numpy as np
 
+class LicenseNumsDataset(Dataset):
+    def __init__(self, image_paths, labels, transform=None):
+        self.image_paths = image_paths
+        self.labels = labels
+        self.transform = transform
 
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        image_path = self.image_paths[idx]
+        image = read_image('licenseNums_archive/'+image_path).float() / 255.0  # PNG画像を読み込む
+        label = self.labels[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+    
 use_cuda=True
 image_nc=1
 batch_size = 256
@@ -34,16 +56,31 @@ pretrained_G.eval()
 all_true_labels = []
 all_pred_labels = []
 
-# test adversarial examples in MNIST training dataset
 # 画像の変換を定義
 transform = transforms.Compose([
-    transforms.Resize((256, 128)),  # 画像のサイズを256x128に変更
-    transforms.ToTensor()           # 画像をテンソルに変換
+    transforms.Resize((256, 128), antialias=True)  # 画像のサイズを256x128に変更
+    # transforms.ToTensor()           # 画像をテンソルに変換
 ])
-mnist_dataset = torchvision.datasets.MNIST('./dataset', train=True, transform=transform, download=True)
-train_dataloader = DataLoader(mnist_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+
+# licenseNums_archive内の全てのファイルをリストアップ
+all_files = [f for f in os.listdir('licenseNums_archive') if os.path.isfile(os.path.join('licenseNums_archive', f))]
+
+# ファイル名からラベルを取得
+all_labels = [int(f.split('_')[1]) for f in all_files]
+
+# train_test_splitを使用してデータセットを分割
+train_files, val_files, train_labels, val_labels = train_test_split(all_files, all_labels, test_size=0.3)
+
+# カスタムのDatasetクラスを使用してDataLoaderを作成
+train_dataset = LicenseNumsDataset(train_files, train_labels, transform=transform)
+val_dataset = LicenseNumsDataset(val_files, val_labels, transform=transform)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+
+
 num_correct = 0
-for i, data in enumerate(train_dataloader, 0):
+for i, data in enumerate(train_loader, 0):
     test_img, test_label = data
     test_img, test_label = test_img.to(device), test_label.to(device)
     perturbation = pretrained_G(test_img)
@@ -55,10 +92,10 @@ for i, data in enumerate(train_dataloader, 0):
     all_pred_labels.extend(pred_lab.cpu().numpy())
     num_correct += torch.sum(pred_lab==test_label,0)
 
-print('MNIST training dataset:')
-print('num_all: ', len(mnist_dataset))
+print('licenseNums training dataset:')
+print('num_all: ', len(train_loader.dataset))
 print('num_correct: ', num_correct.item())
-print('accuracy of adv imgs in training set: %f\n'%(num_correct.item()/len(mnist_dataset)))
+print('accuracy of adv imgs in training set: %f\n'%(num_correct.item()/len(train_loader.dataset)))
 
 conf_matrix_train = confusion_matrix(all_true_labels, all_pred_labels)
 print("Training set confusion matrix:")
@@ -68,11 +105,8 @@ print(conf_matrix_train)
 all_true_labels = []
 all_pred_labels = []
 
-# test adversarial examples in MNIST testing dataset
-mnist_dataset_test = torchvision.datasets.MNIST('./dataset', train=False, transform=transform, download=True)
-test_dataloader = DataLoader(mnist_dataset_test, batch_size=batch_size, shuffle=False, num_workers=1)
 num_correct = 0
-for i, data in enumerate(test_dataloader, 0):
+for i, data in enumerate(val_loader, 0):
     test_img, test_label = data
     test_img, test_label = test_img.to(device), test_label.to(device)
     perturbation = pretrained_G(test_img)
@@ -88,13 +122,14 @@ for i, data in enumerate(test_dataloader, 0):
         for j in range(10):
             sample = adv_img[j]
             sample_label = test_label[j]
-            torchvision.utils.save_image(sample, f'outputs/adv_imgs/20231003_256128_250ep_ans{sample_label}_pred{pred_lab[j]}.png')
+            torchvision.utils.save_image(sample, f'outputs/adv_imgs/20231008_256128_500ep_ans{sample_label}_pred{pred_lab[j]}.png')
 
-print('num_all: ', len(mnist_dataset_test))
+print('licenseNums validation dataset:')
+print('num_all: ', len(val_loader.dataset))
 print('num_correct: ', num_correct.item())
-print('accuracy of adv imgs in testing set: %f\n'%(num_correct.item()/len(mnist_dataset_test)))
+print('accuracy of adv imgs in validation set: %f\n'%(num_correct.item()/len(val_loader.dataset)))
 conf_matrix_test = confusion_matrix(all_true_labels, all_pred_labels)
-print("Testing set confusion matrix:")
+print("Validation set confusion matrix:")
 print(conf_matrix_test)
 
 
