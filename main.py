@@ -1,4 +1,5 @@
 import os
+import argparse
 from PIL import Image
 from sklearn.model_selection import train_test_split
 
@@ -28,6 +29,13 @@ class LicenseNumsDataset(Dataset):
             image = self.transform(image)
         return image, label
 
+# 引数をパースする
+parser = argparse.ArgumentParser()
+parser.add_argument('--target_num', type=int, default=1, help='the target number')
+args = parser.parse_args()
+
+target_num = args.target_num
+
 use_cuda=True
 image_nc=1
 epochs = 500
@@ -39,7 +47,7 @@ BOX_MAX = 1
 print("CUDA Available: ",torch.cuda.is_available())
 device = torch.device("cuda" if (use_cuda and torch.cuda.is_available()) else "cpu")
 
-pretrained_model = "./MNIST_target_model_256128size.pth"
+pretrained_model = "./outputs/exp1/licenseNums_target_model_exp1.pth"
 targeted_model = MNIST_target_net().to(device)
 targeted_model.load_state_dict(torch.load(pretrained_model))
 targeted_model.eval()
@@ -71,6 +79,7 @@ advGAN = AdvGAN_Attack(device,
                           targeted_model,
                           model_num_labels,
                           image_nc,
+                          target_num,
                           BOX_MIN,
                           BOX_MAX)
 

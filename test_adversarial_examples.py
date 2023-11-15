@@ -1,4 +1,5 @@
 import os
+import argparse
 from PIL import Image
 from sklearn.model_selection import train_test_split
 
@@ -29,10 +30,17 @@ class LicenseNumsDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
-    
+
+# 引数をパースする
+parser = argparse.ArgumentParser()
+parser.add_argument('--epoch', type=int, default=250, help='the number of epoch')
+args = parser.parse_args()
+
+epoch = args.epoch
+
 use_cuda=True
 image_nc=1
-batch_size = 256
+batch_size = 128
 
 gen_input_nc = image_nc
 
@@ -47,7 +55,8 @@ target_model.load_state_dict(torch.load(pretrained_model))
 target_model.eval()
 
 # load the generator of adversarial examples
-pretrained_generator_path = './models/netG_256128_epoch_250.pth'
+# pretrained_generator_path = f'./models/netG_256128_epoch_{epoch}.pth'
+pretrained_generator_path = f'./outputs/exp12_fake9/models/netG_256128_fake9_epoch500.pth'
 pretrained_G = models.Generator(gen_input_nc, image_nc).to(device)
 pretrained_G.load_state_dict(torch.load(pretrained_generator_path))
 pretrained_G.eval()
@@ -101,35 +110,53 @@ conf_matrix_train = confusion_matrix(all_true_labels, all_pred_labels)
 print("Training set confusion matrix:")
 print(conf_matrix_train)
 
+# 期待する出力のヘッダーを印刷
+header = "入力データ番号 | " + " | ".join(map(str, range(10)))
+print(header)
 
 all_true_labels = []
 all_pred_labels = []
 
 num_correct = 0
+
 for i, data in enumerate(val_loader, 0):
     test_img, test_label = data
     test_img, test_label = test_img.to(device), test_label.to(device)
+
+    # 摂動生成
     perturbation = pretrained_G(test_img)
     perturbation = torch.clamp(perturbation, -0.3, 0.3)
+
+    # 摂動付加
     adv_img = perturbation + test_img
     adv_img = torch.clamp(adv_img, 0, 1)
-    pred_lab = torch.argmax(target_model(adv_img),1)
+
+    # 敵対的サンプルに対する予測
+    outputs = target_model(adv_img)
+    probabilities = torch.nn.functional.softmax(outputs, dim=1)
+    pred_lab = torch.argmax(probabilities, 1)
+
     all_true_labels.extend(test_label.cpu().numpy())
     all_pred_labels.extend(pred_lab.cpu().numpy())
     num_correct += torch.sum(pred_lab==test_label,0)
 
+    # 各入力に対する確信度を印刷
+    for j in range(test_img.size(0)):
+        confidences = ["{:.2f}".format(prob) for prob in probabilities[j].detach().cpu().numpy()]
+        print("                  {}             | {} | {} | {}".format(j, test_label[j], pred_lab[j], " | ".join(confidences)))
     if i % 1000 == 0:
-        for j in range(10):
-            sample = adv_img[j]
-            sample_label = test_label[j]
-            torchvision.utils.save_image(sample, f'outputs/adv_imgs/20231008_256128_500ep_ans{sample_label}_pred{pred_lab[j]}.png')
+         for j in range(10):
+             sample = adv_img[j]
+             sample_label = test_label[j]
+             torchvision.utils.save_image(test_img[j], f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_real.png')
+             torchvision.utils.save_image(sample, f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_fake.png')
 
 print('licenseNums validation dataset:')
 print('num_all: ', len(val_loader.dataset))
 print('num_correct: ', num_correct.item())
-print('accuracy of adv imgs in validation set: %f\n'%(num_correct.item()/len(val_loader.dataset)))
 conf_matrix_test = confusion_matrix(all_true_labels, all_pred_labels)
 print("Validation set confusion matrix:")
 print(conf_matrix_test)
+print('accuracy of adv imgs in validation set: \n%f\n'%(num_correct.item()/len(val_loader.dataset)))
 
 

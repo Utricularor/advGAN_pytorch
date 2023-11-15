@@ -117,6 +117,11 @@ if __name__ == "__main__":
     # licenseNums_dataset = LicenseNumsDataset(root_dir='./licenseNums_archive', transform=transforms.ToTensor())
     # test_dataloader = DataLoader(licenseNums_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
     
+    # 期待する出力のヘッダーを印刷
+    header = "入力データ番号 | " + " | ".join(map(str, range(10)))
+    print(header)
+
+
     all_targets = []
     all_preds = []
     
@@ -124,11 +129,21 @@ if __name__ == "__main__":
     for i, data in enumerate(val_loader, 0):
         test_img, test_label = data
         test_img, test_label = test_img.to(device), test_label.to(device)
-        pred_lab = torch.argmax(target_model(test_img), 1)
+        outputs = target_model(test_img)
+
+        probabilities = torch.nn.functional.softmax(outputs, dim=1)
+
+        pred_lab = torch.argmax(probabilities, 1)
+
         num_correct += torch.sum(pred_lab==test_label,0)
 
         all_targets.extend(test_label.cpu().numpy())
         all_preds.extend(pred_lab.cpu().numpy())
+
+        # 各入力に対する確信度を印刷
+        for j in range(test_img.size(0)):
+            confidences = ["{:.2f}".format(prob) for prob in probabilities[j].cpu().numpy()]
+            print("                  {}             | {}".format(j, " | ".join(confidences)))
 
     print('accuracy in validation set: %f\n'%(num_correct.item()/len(val_loader.dataset)))
 

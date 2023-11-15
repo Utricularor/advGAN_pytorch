@@ -28,6 +28,7 @@ class AdvGAN_Attack:
                  model,
                  model_num_labels,
                  image_nc,
+                 target_num,
                  box_min,
                  box_max):
         output_nc = image_nc
@@ -36,6 +37,7 @@ class AdvGAN_Attack:
         self.model = model
         self.input_nc = image_nc
         self.output_nc = output_nc
+        self.target_num = target_num
         self.box_min = box_min
         self.box_max = box_max
 
@@ -93,14 +95,29 @@ class AdvGAN_Attack:
             # cal adv loss
             logits_model = self.model(adv_images)
             probs_model = F.softmax(logits_model, dim=1)
-            onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
+            # onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
-            # C&W loss function
-            real = torch.sum(onehot_labels * probs_model, dim=1)
-            other, _ = torch.max((1 - onehot_labels) * probs_model - onehot_labels * 10000, dim=1)
-            zeros = torch.zeros_like(other)
-            loss_adv = torch.max(real - other, zeros)
-            loss_adv = torch.sum(loss_adv)
+            # # C&W loss function
+            # real = torch.sum(onehot_labels * probs_model, dim=1)
+            # other, _ = torch.max((1 - onehot_labels) * probs_model - onehot_labels * 10000, dim=1)
+            # zeros = torch.zeros_like(other)
+            # loss_adv = torch.max(real - other, zeros)
+            # loss_adv = torch.sum(loss_adv)
+
+            ###
+            # target adversarial loss function
+            ###
+            target_labels = [self.target_num]*len(labels)
+            target_onehot_labels = torch.eye(self.model_num_labels, device=self.device)[target_labels]
+
+            target_conf = torch.sum(target_onehot_labels * probs_model, dim=1)
+
+            # 最大値を取るのではなく、和を求めることでターゲット以外のラベルに対してモデルが持つ確信を失わせる
+            others_conf = torch.sum((1 - target_onehot_labels) * probs_model, dim=1)
+            zeros = torch.zeros_like(others_conf)
+
+            losses_adv = torch.max(others_conf - target_conf, zeros)
+            loss_adv = torch.sum(losses_adv)
 
             # maximize cross_entropy loss
             # loss_adv = -F.mse_loss(logits_model, onehot_labels)
@@ -172,7 +189,7 @@ class AdvGAN_Attack:
             self.loss_adv_hist.append(loss_adv_sum/num_batch)
 
             # save generator
-            if epoch%10==0:
+            if epoch%10 == 0:
                 netG_file_name = models_path + 'netG_256128_epoch_' + str(epoch) + '.pth'
                 torch.save(self.netG.state_dict(), netG_file_name)
 
@@ -185,8 +202,8 @@ class AdvGAN_Attack:
         plt.figure(figsize=(10, 8))
 
         # 各損失の学習曲線を描画
-        plt.plot(range(1, epochs + 1), self.loss_D_hist, label="Loss_D")
-        plt.plot(range(1, epochs + 1), self.loss_G_fake_hist, label="Loss_G_fake")
+        plt.plot(range(1, epochs + 1), np.log(self.loss_D_hist), label="Log of Loss_D")
+        plt.plot(range(1, epochs + 1), np.log(self.loss_G_fake_hist), label="Log of Loss_G_fake")
         plt.plot(range(1, epochs + 1), self.loss_perturb_hist, label="Loss_perturb")
         plt.plot(range(1, epochs + 1), self.loss_adv_hist, label="Loss_adv")
 
@@ -196,5 +213,5 @@ class AdvGAN_Attack:
         plt.legend()
 
         # カレントディレクトリに.png形式で保存
-        plt.savefig(f"training_curves_{epoch}.png")
+        plt.savefig(f"./outputs/exp{self.target_num+3}_fake{self.target_num}/training_curves_{epoch}.png")
         plt.close()
