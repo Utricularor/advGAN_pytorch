@@ -3,5 +3,3 @@ __pycache__/*
 models/*
 dataset/*
 licenseNums_archive/*
-
-*.png
