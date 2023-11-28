@@ -1,0 +1,16 @@
+licenseNums validation dataset:
+num_all:  3072
+num_correct:  348
+Validation set confusion matrix:
+[[  1   0   0   0   0   0   0   0   0 330]
+ [  0  20   0  45   0 113   0  32   0  86]
+ [  2   0   0   0   0   1   0   0   0 328]
+ [  1   0   0   7   0   1   0   2   0 307]
+ [  0   0   0   0   1   0   0   0   0 297]
+ [  0   0   0   0   0   0   0   0   1 283]
+ [  3   0   0   0   0   0   0   0   0 305]
+ [  0   0   0   0   1   0   0   1   1 296]
+ [  1   0   0   0   2   0   0   0   1 286]
+ [  0   0   0   0   0   0   0   0   0 317]]
+accuracy of adv imgs in validation set: 
+0.113281

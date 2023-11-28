@@ -40,7 +40,7 @@ epoch = args.epoch
 
 use_cuda=True
 image_nc=1
-batch_size = 128
+batch_size = 32
 
 gen_input_nc = image_nc
 
@@ -49,7 +49,7 @@ print("CUDA Available: ",torch.cuda.is_available())
 device = torch.device("cuda" if (use_cuda and torch.cuda.is_available()) else "cpu")
 
 # load the pretrained model
-pretrained_model = "./MNIST_target_model_256128size.pth"
+pretrained_model = "models/target_model/MNIST_target_model_256128size.pth"
 target_model = MNIST_target_net().to(device)
 target_model.load_state_dict(torch.load(pretrained_model))
 target_model.eval()
@@ -140,16 +140,26 @@ for i, data in enumerate(val_loader, 0):
     all_pred_labels.extend(pred_lab.cpu().numpy())
     num_correct += torch.sum(pred_lab==test_label,0)
 
-    # 各入力に対する確信度を印刷
+    # 各入力に対する確信度を出力
     for j in range(test_img.size(0)):
         confidences = ["{:.2f}".format(prob) for prob in probabilities[j].detach().cpu().numpy()]
-        print("                  {}             | {} | {} | {}".format(j, test_label[j], pred_lab[j], " | ".join(confidences)))
-    if i % 1000 == 0:
-         for j in range(10):
-             sample = adv_img[j]
-             sample_label = test_label[j]
-             torchvision.utils.save_image(test_img[j], f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_real.png')
-             torchvision.utils.save_image(sample, f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_fake.png')
+        print("                  {}             | (right) {} | (adv) {} | {}".format(j, test_label[j], pred_lab[j], " | ".join(confidences)))
+    
+    # for j in range(batch_size):
+        # ターゲットラベルを９に設定しているときに５に，より間違えやすい（実験12）
+        # その原因を探るべくラベル１の画像を９に間違えるように生成した摂動がどのようになった結果５と誤識別するようになったのか確認する
+        # if (test_label[j] == 1) & (pred_lab[j] == 5):
+        #     sample = adv_img[j]
+        #     sample_label = test_label[j]
+        #     torchvision.utils.save_image(test_img[j], f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_real.png')
+        #     torchvision.utils.save_image(sample, f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_fake.png')
+    
+    # if i % 1000 == 0:
+         # for j in range(10):
+             # sample = adv_img[j]
+             # sample_label = test_label[j]
+             # torchvision.utils.save_image(test_img[j], f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_real.png')
+             # torchvision.utils.save_image(sample, f'./outputs/exp12_fake9/adv_imgs/ans{sample_label}_pred{pred_lab[j]}_fake.png')
 
 print('licenseNums validation dataset:')
 print('num_all: ', len(val_loader.dataset))

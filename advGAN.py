@@ -29,6 +29,7 @@ class AdvGAN_Attack:
                  model_num_labels,
                  image_nc,
                  target_num,
+                 exp_num,
                  box_min,
                  box_max):
         output_nc = image_nc
@@ -38,6 +39,7 @@ class AdvGAN_Attack:
         self.input_nc = image_nc
         self.output_nc = output_nc
         self.target_num = target_num
+        self.exp_num = exp_num
         self.box_min = box_min
         self.box_max = box_max
 
@@ -190,7 +192,7 @@ class AdvGAN_Attack:
 
             # save generator
             if epoch%10 == 0:
-                netG_file_name = models_path + 'netG_256128_epoch_' + str(epoch) + '.pth'
+                netG_file_name = models_path + 'netG_fake'+ str(self.target_num) + '_' + str(epoch) + 'epoch.pth'
                 torch.save(self.netG.state_dict(), netG_file_name)
 
             # 追加：学習曲線を描画するメソッドを呼び出し
@@ -202,8 +204,8 @@ class AdvGAN_Attack:
         plt.figure(figsize=(10, 8))
 
         # 各損失の学習曲線を描画
-        plt.plot(range(1, epochs + 1), np.log(self.loss_D_hist), label="Log of Loss_D")
-        plt.plot(range(1, epochs + 1), np.log(self.loss_G_fake_hist), label="Log of Loss_G_fake")
+        plt.plot(range(1, epochs + 1), self.loss_D_hist, label="Loss_D")
+        plt.plot(range(1, epochs + 1), self.loss_G_fake_hist, label="Loss_G_fake")
         plt.plot(range(1, epochs + 1), self.loss_perturb_hist, label="Loss_perturb")
         plt.plot(range(1, epochs + 1), self.loss_adv_hist, label="Loss_adv")
 
@@ -212,6 +214,8 @@ class AdvGAN_Attack:
         plt.ylabel("Loss")
         plt.legend()
 
+        plt.yscale('log')
+
         # カレントディレクトリに.png形式で保存
-        plt.savefig(f"./outputs/exp{self.target_num+3}_fake{self.target_num}/training_curves_{epoch}.png")
+        plt.savefig(f"./outputs/exp{self.exp_num}_fake{self.target_num}/tr_curves/training_curves_{epoch}.png")
         plt.close()

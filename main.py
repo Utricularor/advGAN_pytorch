@@ -32,14 +32,16 @@ class LicenseNumsDataset(Dataset):
 # 引数をパースする
 parser = argparse.ArgumentParser()
 parser.add_argument('--target_num', type=int, default=1, help='the target number')
+parser.add_argument('--exp_num', type=int, default=0, help='the experiment number')
 args = parser.parse_args()
 
 target_num = args.target_num
+exp_num = args.exp_num
 
 use_cuda=True
 image_nc=1
 epochs = 500
-batch_size = 312
+batch_size = 32
 BOX_MIN = 0
 BOX_MAX = 1
 
@@ -47,17 +49,11 @@ BOX_MAX = 1
 print("CUDA Available: ",torch.cuda.is_available())
 device = torch.device("cuda" if (use_cuda and torch.cuda.is_available()) else "cpu")
 
-pretrained_model = "./outputs/exp1/licenseNums_target_model_exp1.pth"
+pretrained_model = "models/target_model/MNIST_target_model_256128size.pth"
 targeted_model = MNIST_target_net().to(device)
 targeted_model.load_state_dict(torch.load(pretrained_model))
 targeted_model.eval()
 model_num_labels = 10
-
-# 画像の変換を定義
-transform = transforms.Compose([
-    transforms.Resize((256, 128), antialias=True)  # 画像のサイズを256x128に変更
-    # transforms.ToTensor()           # 画像をテンソルに変換
-])
 
 # licenseNums_archive内の全てのファイルをリストアップ
 all_files = [f for f in os.listdir('licenseNums_archive') if os.path.isfile(os.path.join('licenseNums_archive', f))]
@@ -69,8 +65,8 @@ all_labels = [int(f.split('_')[1]) for f in all_files]
 train_files, val_files, train_labels, val_labels = train_test_split(all_files, all_labels, test_size=0.3)
 
 # カスタムのDatasetクラスを使用してDataLoaderを作成
-train_dataset = LicenseNumsDataset(train_files, train_labels, transform=transform)
-val_dataset = LicenseNumsDataset(val_files, val_labels, transform=transform)
+train_dataset = LicenseNumsDataset(train_files, train_labels)
+val_dataset = LicenseNumsDataset(val_files, val_labels)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
@@ -80,6 +76,7 @@ advGAN = AdvGAN_Attack(device,
                           model_num_labels,
                           image_nc,
                           target_num,
+                          exp_num,
                           BOX_MIN,
                           BOX_MAX)
 
